@@ -17,6 +17,8 @@ blobfile = "^3.0.0"
 ml-dtypes = "^0.5.0"
 rich = "^13.8.1"
 torch = {version = "^2.4.1+cu124", source = "pytorch"}
+fastapi = "^0.115.0"
+uvicorn = "^0.31.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.3.2"
