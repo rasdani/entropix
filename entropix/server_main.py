@@ -25,13 +25,13 @@ import jax.numpy as jnp
 app = FastAPI()
 
 # Add CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # Allows all origins
-    allow_credentials=True,
-    allow_methods=["*"],  # Allows all methods
-    allow_headers=["*"],  # Allows all headers
-)
+# app.add_middleware(
+#     CORSMiddleware,
+#     allow_origins=["*"],  # Allows all origins
+#     allow_credentials=True,
+#     allow_methods=["*"],  # Allows all methods
+#     allow_headers=["*"],  # Allows all headers
+# )
 
 # Load model weights and tokenizer
 model_params = LLAMA_1B_PARAMS
@@ -108,5 +108,5 @@ if __name__ == "__main__":
         app,
         host="0.0.0.0",
         port=8000,
-        http="httptools",  # for streaming
+        # http="httptools",  # for streaming
     )

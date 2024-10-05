@@ -46,6 +46,7 @@ import {
   TooltipProvider,
 } from "@/components/ui/tooltip"
 import React, { useState, useEffect } from "react";
+import { createParser, ParsedEvent, ReconnectInterval } from 'eventsource-parser';
 
 export default function Dashboard() {
   const [message, setMessage] = useState("");
@@ -65,78 +66,50 @@ Which number is larger, 9.9 or 9.11?<|eot_id|><|start_header_id|>assistant<|end_
     setMessage(defaultPrompt);
   }, []);
 
-  useEffect(() => {
-    // This effect will run every time the response changes
-  }, [response]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setResponse("");
 
-    const response = await fetch("/api/generate", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ prompt: message }),
-    });
+    try {
+      const response = await fetch("/api/generate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ prompt: message }),
+      });
 
-    if (!response.body) return;
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
 
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
-    let chunkCount = 0;
+      if (!response.body) {
+        throw new Error('No response body');
+      }
 
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      const decodedChunk = decoder.decode(value, { stream: true });
-      chunkCount += 1;
-      console.log(`Chunk ${chunkCount}:`, decodedChunk);
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
 
-      buffer += decodedChunk;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value);
+        const lines = chunk.split('\n');
+        const parsedLines = lines
+          .filter((line) => line.trim() !== '')
+          .map((line) => JSON.parse(line));
 
-      let lines = buffer.split('\n');
-      buffer = lines.pop() || ''; // Save the last partial line back to buffer
-
-      for (let line of lines) {
-        if (line.trim() === '') continue; // Skip empty lines
-        try {
-          const jsonResponse = JSON.parse(line);
-          if (jsonResponse.token) {
-            console.log(`Token: ${jsonResponse.token}`);
-            setResponse((prev) => {
-              const newResponse = prev + jsonResponse.token;
-              // Force a re-render
-              setUpdateTrigger(t => t + 1);
-              return newResponse;
-            });
+        for (const parsedLine of parsedLines) {
+          const { token } = parsedLine;
+          if (token) {
+            setResponse((prev) => prev + token);
           }
-        } catch (error) {
-          console.error("Error parsing JSON:", error);
         }
       }
+    } catch (error) {
+      console.error("Error generating response:", error);
     }
-
-    // Handle any remaining data in the buffer
-    if (buffer.trim() !== '') {
-      try {
-        const jsonResponse = JSON.parse(buffer);
-        if (jsonResponse.token) {
-          setResponse((prev) => {
-            const newResponse = prev + jsonResponse.token;
-            // Force a re-render
-            setUpdateTrigger(t => t + 1);
-            return newResponse;
-          });
-        }
-      } catch (error) {
-        console.error("Error parsing JSON:", error);
-      }
-    }
-
-    setMessage("");
   };
 
   return (
@@ -509,7 +482,7 @@ Which number is larger, 9.9 or 9.11?<|eot_id|><|start_header_id|>assistant<|end_
             </Badge>
             <div className="flex-1 overflow-auto whitespace-pre-wrap">
               {response}
-            </div>
+            </div>      
             <form
               onSubmit={handleSubmit}
               className="relative overflow-hidden rounded-lg border bg-background focus-within:ring-1 focus-within:ring-ring"
