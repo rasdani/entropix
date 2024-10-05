@@ -23,6 +23,7 @@ sglang = {extras = ["openai"], version = "^0.3.2"}
 pytest = "^8.3.2"
 ruff = "^0.6.2"
 transformers = "^4.45.1"
+huggingface-hub = {extras = ["cli"], version = "^0.25.1"}
 
 
 [tool.poetry.group.test.dependencies]
