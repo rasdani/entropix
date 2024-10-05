@@ -249,6 +249,62 @@ def sample(gen_tokens: jax.Array, logits: jax.Array, temperature=0.666, top_p=0.
         t = jnp.clip((ent + vent) / 10.0, 0.5, 2.0)
         return _sample(logits, temperature=t * temperature)
 
+def sample_debug(tokenizer, gen_tokens: jax.Array, logits: jax.Array, temperature=0.666, top_p=0.90, top_k=27, key=jax.random.PRNGKey(1337)) -> jax.Array:
+    ent, vent = calculate_varentropy_logsoftmax(logits)
+
+    # ANSI color codes
+    BLUE = '\033[94m'
+    RED = '\033[91m'
+    GREEN = '\033[92m'
+    YELLOW = '\033[93m'
+    RESET = '\033[0m'
+
+    def get_classification():
+        if ent[0][0] < 0.1 and vent[0][0] < 0.1:
+            return f"{BLUE}low\t{BLUE}low{RESET}"
+        elif ent[0][0] > 5.0 and vent[0][0] < 0.1:
+            return f"{RED}high\t{BLUE}low{RESET}"
+        elif ent[0][0] < 5.0 and vent[0][0] > 5.0:
+            return f"{GREEN}middle\t{RED}high{RESET}"
+        elif ent[0][0] > 5.0 and vent[0][0] > 5.0:
+            return f"{RED}high\t{RED}high{RESET}"
+        else:
+            return f"{GREEN}middle\tmiddle{RESET}"
+
+    classification = get_classification()
+
+    # Low Entropy, Low Varentropy: "flowing with unspoken intent"
+    if ent[0][0] < 0.1 and vent[0][0] < 0.1:
+        next_token = jnp.argmax(logits[:, -1], axis=-1, keepdims=True).astype(jnp.int32)
+    elif ent[0][0] > 5.0 and vent[0][0] < 0.1:
+        if not jnp.isin(gen_tokens[:,-1], 2564).any():
+            next_token = jnp.array([[2564]])  # Assuming 2564 is our "ask clarifying question" token
+        else:
+            # If we've just asked a question, sample with slightly higher temperature
+            next_token = _sample(logits, temperature=min(1.3, temperature * 1.5))
+    elif ent[0][0] < 5.0 and vent[0][0] > 5.0:
+        # TODO(xjdr): Implement proper branching logic
+        # Return top-k tokens to allow for branching
+        #top_k_values, top_k_indices = jax.lax.top_k(logits[:, -1], k=top_k)
+        #return top_k_indices
+        next_token = _sample(logits, temperature=min(1.2, temperature * 1.5))
+    elif ent[0][0] > 5.0 and vent[0][0] > 5.0:
+        # Use high temperature and min_p sampling
+        next_token = _sample(logits, temperature=max(2.0, temperature * 3))
+    # Middle ground: smooth transition
+    else:
+        # Interpolate temperature based on entropy and varentropy
+        t = jnp.clip((ent[0][0] + vent[0][0]) / 10.0, 0.5, 2.0)
+        next_token = _sample(logits, temperature=t * temperature)
+
+    token_str = tokenizer.decode(next_token.tolist()[0])
+    
+    # Add yellow warning if token 2564 is returned
+    warning = f"{YELLOW}WARNING: Clarifying token returned{RESET} " if next_token.item() == 2564 else ""
+    
+    print(f'{float(ent[0][0]):<15.6f} {float(vent[0][0]):<15.6f} {classification:<40} {warning}{token_str}')
+
+    return next_token
 
 def main():
   model_params = LLAMA_1B_PARAMS
@@ -278,28 +334,31 @@ def main():
     logits, kvcache = xfmr(xfmr_weights, model_params, tokens, cur_pos, freqs_cis[:seqlen], kvcache, attn_mask=attn_mask)
     next_token = jnp.argmax(logits[:, -1], axis=-1, keepdims=True).astype(jnp.int32)
     gen_tokens = next_token
-    print(tokenizer.decode([next_token.item()]), end='', flush=True)
+    # print(tokenizer.decode([next_token.item()]), end='', flush=True)
+    print(tokenizer.decode([next_token.item()]), flush=True)
     cur_pos = seqlen
     stop = jnp.array([128001, 128008, 128009])
     #stop = jnp.array(tokenizer.stop_tokens)
+    # breakpoint()
     while cur_pos < 2048:
       cur_pos += 1
       logits, kvcache = xfmr(xfmr_weights, model_params, next_token, cur_pos, freqs_cis[cur_pos:cur_pos+1], kvcache)
-      next_token = sample(gen_tokens, logits)
+      # next_token = sample(gen_tokens, logits)
+      next_token = sample_debug(tokenizer, gen_tokens, logits)
       gen_tokens = jnp.concatenate((gen_tokens, next_token))
-      print(tokenizer.decode(next_token.tolist()[0]), end='', flush=True)
+      # print(tokenizer.decode(next_token.tolist()[0]), end='', flush=True)
       if jnp.isin(next_token, stop).any():
         break
 
-  print(prompt)
-  generate(xfmr_weights, model_params, raw_tokens1)
-  print('\n')
-  print(prompt2)
-  generate(xfmr_weights, model_params, raw_tokens2)
-  print('\n')
-  print(prompt3)
-  generate(xfmr_weights, model_params, raw_tokens3)
-  print('\n')
+  # print(prompt)
+  # generate(xfmr_weights, model_params, raw_tokens1)
+  # print('\n')
+  # print(prompt2)
+  # generate(xfmr_weights, model_params, raw_tokens2)
+  # print('\n')
+  # print(prompt3)
+  # generate(xfmr_weights, model_params, raw_tokens3)
+  # print('\n')
   print(prompt4)
   generate(xfmr_weights, model_params, raw_tokens4)
   print('\n')
