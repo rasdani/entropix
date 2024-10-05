@@ -219,35 +219,43 @@ def sample(gen_tokens: jax.Array, logits: jax.Array, temperature=0.666, top_p=0.
 
     # Low Entropy, Low Varentropy: "flowing with unspoken intent"
     if ent < 0.1 and vent < 0.1:
-        return jnp.argmax(logits[:, -1], axis=-1, keepdims=True).astype(jnp.int32)
+        ret = jnp.argmax(logits[:, -1], axis=-1, keepdims=True).astype(jnp.int32)
+        # return jnp.argmax(logits[:, -1], axis=-1, keepdims=True).astype(jnp.int32)
 
     # High Entropy, Low Varentropy: "treading carefully, asking clarifying questions"
     elif ent > 5.0 and vent < 0.1:
         # Insert a clarifying question token if not already present
         if not jnp.isin(gen_tokens[:,-1], 2564).any():
-            return jnp.array([[2564]])  # Assuming 2564 is our "ask clarifying question" token
+            ret = jnp.array([[2564]])  # Assuming 2564 is our "ask clarifying question" token
+            # return jnp.array([[2564]])  # Assuming 2564 is our "ask clarifying question" token
         else:
             # If we've just asked a question, sample with slightly higher temperature
-            return _sample(logits, temperature=min(1.3, temperature * 1.5))
+            ret = _sample(logits, temperature=min(1.3, temperature * 1.5))
+            # return _sample(logits, temperature=min(1.3, temperature * 1.5))
 
     # Low Entropy, High Varentropy: "exploring forks in the path"
     elif ent < 5.0 and vent > 5.0:
         # TODO(xjdr): Implement proper branching logic
         # Return top-k tokens to allow for branching
         #top_k_values, top_k_indices = jax.lax.top_k(logits[:, -1], k=top_k)
-        #return top_k_indices
-        return _sample(logits, temperature=min(1.2, temperature * 1.5))
+        # return top_k_indices
+        ret = _sample(logits, temperature=min(1.2, temperature * 1.5))
+        # return _sample(logits, temperature=min(1.2, temperature * 1.5))
 
     # High Entropy, High Varentropy: "resampling in the mist"
     elif ent > 5.0 and vent > 5.0:
         # Use high temperature and min_p sampling
-        return _sample(logits, temperature=max(2.0, temperature * 3))
+        ret = _sample(logits, temperature=max(2.0, temperature * 3))
+        # return _sample(logits, temperature=max(2.0, temperature * 3))
 
     # Middle ground: smooth transition
     else:
         # Interpolate temperature based on entropy and varentropy
         t = jnp.clip((ent + vent) / 10.0, 0.5, 2.0)
-        return _sample(logits, temperature=t * temperature)
+        ret = _sample(logits, temperature=t * temperature)
+        # return _sample(logits, temperature=t * temperature)
+
+    return ret, ent.item(), vent.item()
 
 
 def main():

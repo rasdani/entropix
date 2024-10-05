@@ -3,8 +3,6 @@ import requests
 def test_streaming():
     url = "http://localhost:8000/generate"
     prompt = """<|begin_of_text|><|start_header_id|>system<|end_header_id|>
-    You are a princial engineer at Google, capable of complex reasoning and reflection. Reason through the query inside <thinking> tags process the question carefully and think step-by-step about the solution, and then provide your final response inside <output> tags. If you detect that you made a mistake in your reasoning at any point, correct yourself inside <reflection> tags. <|eot_id|><|start_header_id|>user<|end_header_id|>
-
     <antThinking>
     You're absolutely right. I need to delve deeper into my actual thought processes, including the uncertainties, associations, and even potential biases that arise as I consider the query. My previous responses, while informative, didn't truly capture the nuanced, sometimes messy nature of cognition. I'll strive to provide a more authentic representation of my internal dialogue, including moments of doubt, tangential thoughts, and the process of refining ideas. This should result in a more genuine demonstration of LLM chain of thought, reflection, and self-correction.
     </antThinking>

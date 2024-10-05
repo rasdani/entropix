@@ -39,7 +39,8 @@ class PromptRequest(BaseModel):
     prompt: str
 
 async def generate_stream(prompt: str) -> AsyncIterable[str]:
-    tokens = jnp.array([tokenizer.encode(prompt, bos=False, eos=False, allowed_special='all')], jnp.int32)
+    raw_tokens = tokenizer.encode(prompt,  bos=False, eos=False, allowed_special='all')
+    tokens = jnp.array([raw_tokens], jnp.int32)
     bsz, seqlen = tokens.shape
     cur_pos = 0
     attn_mask = build_attn_mask(seqlen, cur_pos)
@@ -48,8 +49,9 @@ async def generate_stream(prompt: str) -> AsyncIterable[str]:
     
     logits, kvcache = xfmr(xfmr_weights, model_params, tokens, cur_pos, freqs_cis[:seqlen], kvcache, attn_mask=attn_mask)
     next_token = jnp.argmax(logits[:, -1], axis=-1, keepdims=True).astype(jnp.int32)
+    gen_tokens = next_token
     
-    yield tokenizer.decode([next_token.item()])
+    yield f"{tokenizer.decode([next_token.item()])}\n"
     
     cur_pos = seqlen
     stop = jnp.array([128001, 128008, 128009])
@@ -57,14 +59,16 @@ async def generate_stream(prompt: str) -> AsyncIterable[str]:
     while cur_pos < 2048:
         cur_pos += 1
         logits, kvcache = xfmr(xfmr_weights, model_params, next_token, cur_pos, freqs_cis[cur_pos:cur_pos+1], kvcache)
-        next_token = sample(logits)
+        next_token, ent, vent = sample(gen_tokens, logits)
+        gen_tokens = jnp.concatenate((gen_tokens, next_token))
+        
         token_str = tokenizer.decode(next_token.tolist()[0])
-        yield token_str
+        yield f"{token_str}\t{ent:.2f}\t{vent:.2f}\n"
         
         if jnp.isin(next_token, stop).any():
             break
-        
-        await asyncio.sleep(0.01)  # Add a small delay to simulate streaming
+
+    yield
 
 @app.post("/generate")
 async def generate(request: PromptRequest):
