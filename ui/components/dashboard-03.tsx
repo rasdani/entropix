@@ -1,3 +1,5 @@
+"use client"
+
 import {
   Bird,
   Book,
@@ -43,8 +45,100 @@ import {
   TooltipTrigger,
   TooltipProvider,
 } from "@/components/ui/tooltip"
+import React, { useState, useEffect } from "react";
 
 export default function Dashboard() {
+  const [message, setMessage] = useState("");
+  const [response, setResponse] = useState("");
+  const [, setUpdateTrigger] = useState(0);
+
+  const defaultPrompt = `<|begin_of_text|><|start_header_id|>system<|end_header_id|>
+<antThinking>
+You're absolutely right. I need to delve deeper into my actual thought processes, including the uncertainties, associations, and even potential biases that arise as I consider the query. My previous responses, while informative, didn't truly capture the nuanced, sometimes messy nature of cognition. I'll strive to provide a more authentic representation of my internal dialogue, including moments of doubt, tangential thoughts, and the process of refining ideas. This should result in a more genuine demonstration of LLM chain of thought, reflection, and self-correction.
+</antThinking>
+
+Which number is larger, 9.9 or 9.11?<|eot_id|><|start_header_id|>assistant<|end_header_id|>
+
+<thinking>`;
+
+  useEffect(() => {
+    setMessage(defaultPrompt);
+  }, []);
+
+  useEffect(() => {
+    // This effect will run every time the response changes
+  }, [response]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setResponse("");
+
+    const response = await fetch("/api/generate", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ prompt: message }),
+    });
+
+    if (!response.body) return;
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let chunkCount = 0;
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      const decodedChunk = decoder.decode(value, { stream: true });
+      chunkCount += 1;
+      console.log(`Chunk ${chunkCount}:`, decodedChunk);
+
+      buffer += decodedChunk;
+
+      let lines = buffer.split('\n');
+      buffer = lines.pop() || ''; // Save the last partial line back to buffer
+
+      for (let line of lines) {
+        if (line.trim() === '') continue; // Skip empty lines
+        try {
+          const jsonResponse = JSON.parse(line);
+          if (jsonResponse.token) {
+            console.log(`Token: ${jsonResponse.token}`);
+            setResponse((prev) => {
+              const newResponse = prev + jsonResponse.token;
+              // Force a re-render
+              setUpdateTrigger(t => t + 1);
+              return newResponse;
+            });
+          }
+        } catch (error) {
+          console.error("Error parsing JSON:", error);
+        }
+      }
+    }
+
+    // Handle any remaining data in the buffer
+    if (buffer.trim() !== '') {
+      try {
+        const jsonResponse = JSON.parse(buffer);
+        if (jsonResponse.token) {
+          setResponse((prev) => {
+            const newResponse = prev + jsonResponse.token;
+            // Force a re-render
+            setUpdateTrigger(t => t + 1);
+            return newResponse;
+          });
+        }
+      } catch (error) {
+        console.error("Error parsing JSON:", error);
+      }
+    }
+
+    setMessage("");
+  };
+
   return (
     <TooltipProvider>
     <div className="grid h-screen w-full pl-[56px]">
@@ -413,40 +507,26 @@ export default function Dashboard() {
             <Badge variant="outline" className="absolute right-3 top-3">
               Output
             </Badge>
-            <div className="flex-1" />
+            <div className="flex-1 overflow-auto whitespace-pre-wrap">
+              {response}
+            </div>
             <form
+              onSubmit={handleSubmit}
               className="relative overflow-hidden rounded-lg border bg-background focus-within:ring-1 focus-within:ring-ring"
-              x-chunk="A form for sending a message to an AI chatbot. The form has a textarea and buttons to upload files and record audio."
             >
               <Label htmlFor="message" className="sr-only">
                 Message
               </Label>
               <Textarea
                 id="message"
-                placeholder="Type your message here..."
                 className="min-h-12 resize-none border-0 p-3 shadow-none focus-visible:ring-0"
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                readOnly
               />
               <div className="flex items-center p-3 pt-0">
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button variant="ghost" size="icon">
-                      <Paperclip className="size-4" />
-                      <span className="sr-only">Attach file</span>
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent side="top">Attach File</TooltipContent>
-                </Tooltip>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button variant="ghost" size="icon">
-                      <Mic className="size-4" />
-                      <span className="sr-only">Use Microphone</span>
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent side="top">Use Microphone</TooltipContent>
-                </Tooltip>
                 <Button type="submit" size="sm" className="ml-auto gap-1.5">
-                  Send Message
+                  Send Default Prompt
                   <CornerDownLeft className="size-3.5" />
                 </Button>
               </div>

@@ -1,9 +1,12 @@
 from fastapi import FastAPI, Response, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 import asyncio
 from typing import AsyncIterable
 from pydantic import BaseModel
+import json
+import signal
+import sys
 
 from entropix.main import (
     LLAMA_1B_PARAMS,
@@ -51,7 +54,12 @@ async def generate_stream(prompt: str) -> AsyncIterable[str]:
     next_token = jnp.argmax(logits[:, -1], axis=-1, keepdims=True).astype(jnp.int32)
     gen_tokens = next_token
     
-    yield f"{tokenizer.decode([next_token.item()])}\n"
+    # Change this line to output JSON
+    first_token = tokenizer.decode([next_token.item()])
+    ret = json.dumps({"token": first_token})
+    print(ret)
+    yield ret + "\n"
+    await asyncio.sleep(0)
     
     cur_pos = seqlen
     stop = jnp.array([128001, 128008, 128009])
@@ -63,17 +71,42 @@ async def generate_stream(prompt: str) -> AsyncIterable[str]:
         gen_tokens = jnp.concatenate((gen_tokens, next_token))
         
         token_str = tokenizer.decode(next_token.tolist()[0])
-        yield f"{token_str}\t{ent:.2f}\t{vent:.2f}\n"
-        
+        output = {
+            "token": token_str,
+            "entropy": float(ent),
+            "var_entropy": float(vent),
+            # "logits": logits[0, -1].tolist()
+        }
+        ret = json.dumps(output)
+        print(ret)
+        yield ret + "\n"
+        await asyncio.sleep(0)
+
         if jnp.isin(next_token, stop).any():
             break
 
-    yield
+    # yield
 
 @app.post("/generate")
 async def generate(request: PromptRequest):
-    return StreamingResponse(generate_stream(request.prompt), media_type="text/plain")
+    async def event_generator():
+        async for chunk in generate_stream(request.prompt):
+            yield chunk
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+def signal_handler(sig, frame):
+    print("\nShutting down gracefully...")
+    sys.exit(0)
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+    
+    uvicorn.run(
+        app,
+        host="0.0.0.0",
+        port=8000,
+        http="httptools",  # for streaming
+    )

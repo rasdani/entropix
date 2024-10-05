@@ -19,6 +19,7 @@ rich = "^13.8.1"
 torch = {version = "^2.4.1", source = "pytorch", extras = ["+cu124"], markers = "platform_system != 'Darwin'"}
 fastapi = "^0.115.0"
 uvicorn = "^0.31.0"
+httptools = "^0.6.1"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.3.2"
