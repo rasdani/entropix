@@ -17,6 +17,7 @@ blobfile = "^3.0.0"
 ml-dtypes = "^0.5.0"
 rich = "^13.8.1"
 torch = {version = "^2.4.1", source = "pytorch", extras = ["+cu124"], markers = "platform_system != 'Darwin'"}
+sglang = {extras = ["openai"], version = "^0.3.2"}
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.3.2"
@@ -25,7 +26,7 @@ transformers = "^4.45.1"
 
 
 [tool.poetry.group.test.dependencies]
-torch = "^2.4.1"
+torch = "^2.4.0"
 fairscale = "^0.4.13"
 
 
